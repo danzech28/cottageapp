@@ -1,0 +1,797 @@
+<!--
+  The Cottage Ledger — shared family scheduling, season draft & expense fairness.
+  Single-file prototype. Data persists via the artifact storage API (shared
+  across everyone who opens this artifact). No external storage / no localStorage.
+-->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper:#e9f4f8; --paper-2:#d8ecf2; --card:#ffffff; --ink:#2f4a57; --ink-soft:#7796a3;
+    --forest:#1aa3b0; --forest-deep:#13899a; --lake:#3aa6d0; --rust:#f0825a; --gold:#f4c24e;
+    --line:#dcebf0; --line-strong:#bfdde7;
+    --shadow:0 1px 2px rgba(47,74,87,.04),0 10px 28px -14px rgba(47,74,87,.16); --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1100px 520px at 82% -12%, rgba(91,179,224,.30), transparent 60%),
+      radial-gradient(900px 520px at -8% 112%, rgba(244,194,78,.20), transparent 58%),
+      linear-gradient(180deg, #f1f9fb 0%, var(--paper) 100%);
+    background-attachment:fixed;
+    color:var(--ink); font-family:"Hanken Grotesk",system-ui,sans-serif; font-size:15px;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1060px; margin:0 auto; padding:28px 20px 90px}
+  header.masthead{display:flex; align-items:flex-end; justify-content:space-between; gap:20px;
+    flex-wrap:wrap; border-bottom:1.5px solid var(--line-strong); padding-bottom:16px; margin-bottom:8px}
+  .brand h1{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(30px,5vw,46px);
+    line-height:.98; margin:0; letter-spacing:-.01em}
+  .brand .sub{font-family:"Fraunces",serif; font-style:italic; color:var(--ink-soft); font-size:15px; margin-top:6px}
+  .header-meta{text-align:right; font-size:12.5px; color:var(--ink-soft)}
+  .header-meta .dot{color:var(--forest)}
+  nav.tabs{display:flex; gap:4px; margin:22px 0 24px; flex-wrap:wrap}
+  nav.tabs button{font-family:inherit; font-weight:600; font-size:14px; border:1px solid transparent;
+    background:transparent; color:var(--ink-soft); padding:9px 16px; border-radius:999px; cursor:pointer; transition:.15s}
+  nav.tabs button:hover{color:var(--ink); background:rgba(43,43,36,.04)}
+  nav.tabs button.active{color:#fff; background:var(--forest); border-color:var(--forest-deep); box-shadow:var(--shadow)}
+  .panel{display:none; animation:rise .35s ease both}
+  .panel.show{display:block}
+  @keyframes rise{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .card+.card{margin-top:20px}
+  .card .card-h{padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center;
+    justify-content:space-between; gap:12px; flex-wrap:wrap}
+  .card .card-h h2{font-family:"Fraunces",serif; font-weight:600; font-size:19px; margin:0}
+  .card .card-b{padding:18px}
+  .grid2{display:grid; grid-template-columns:1fr; gap:20px}
+  @media (min-width:860px){.grid2{grid-template-columns:360px 1fr; align-items:start}}
+  label.fl{display:block; font-size:12px; font-weight:600; letter-spacing:.03em; text-transform:uppercase;
+    color:var(--ink-soft); margin:12px 0 5px}
+  input,select,textarea{width:100%; font-family:inherit; font-size:14.5px; color:var(--ink); background:#fff;
+    border:1px solid var(--line-strong); border-radius:9px; padding:9px 11px; transition:.15s}
+  input:focus,select:focus,textarea:focus{outline:none; border-color:var(--forest); box-shadow:0 0 0 3px rgba(26,163,176,.16)}
+  .row{display:flex; gap:10px} .row>*{flex:1}
+  button.btn{font-family:inherit; font-weight:600; font-size:14px; cursor:pointer; border-radius:9px;
+    padding:10px 16px; border:1px solid var(--forest-deep); background:var(--forest); color:#fff; transition:.15s; margin-top:16px}
+  button.btn:hover{background:var(--forest-deep); transform:translateY(-1px)}
+  button.btn:disabled{opacity:.45; cursor:not-allowed; transform:none}
+  button.btn.ghost{background:transparent; color:var(--ink); border-color:var(--line-strong)}
+  button.btn.ghost:hover{background:rgba(43,43,36,.05); transform:none}
+  button.btn.sm{padding:6px 11px; font-size:12.5px; margin:0}
+  button.btn.danger{background:transparent; color:var(--rust); border-color:transparent; padding:4px 8px; margin:0}
+  button.btn.danger:hover{background:rgba(240,130,90,.12); transform:none}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin-top:6px}
+  .empty{color:var(--ink-soft); font-style:italic; font-family:"Fraunces",serif; padding:8px 2px}
+  .members-list{display:flex; flex-direction:column; gap:8px}
+  .member-row{display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--line);
+    border-radius:10px; background:#fff}
+  .swatch{width:16px; height:16px; border-radius:5px; flex:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  .member-row .name{font-weight:600}
+  .member-row .meta{color:var(--ink-soft); font-size:12.5px; margin-left:auto}
+  .cal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .cal-head .mo{font-family:"Fraunces",serif; font-size:20px; font-weight:600}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px}
+  .cal-dow{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);
+    text-align:center; padding-bottom:4px}
+  .cal-cell{min-height:64px; border:1px solid var(--line); border-radius:9px; background:#fff; padding:5px 6px; position:relative}
+  .cal-cell.out{background:var(--paper-2); opacity:.5}
+  .cal-cell.today{border-color:var(--forest); box-shadow:0 0 0 2px rgba(26,163,176,.18) inset}
+  .cal-cell .dn{font-size:12px; font-weight:600; color:var(--ink-soft)}
+  .cal-cell .bars{display:flex; flex-direction:column; gap:2px; margin-top:3px}
+  .cal-bar{font-size:10.5px; line-height:1.25; color:#fff; border-radius:4px; padding:1px 5px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis}
+  .item{display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:none}
+  .item .grow{flex:1; min-width:0}
+  .item .t{font-weight:600}
+  .item .s{font-size:12.5px; color:var(--ink-soft)}
+  .item .amt{font-family:"Fraunces",serif; font-weight:600; font-size:16px}
+  .pill{font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; color:#fff; display:inline-block}
+  .tag{font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; background:var(--paper-2);
+    color:var(--ink-soft); border:1px solid var(--line)}
+  .warn{color:var(--rust); font-weight:600; font-size:12.5px}
+  .seg{display:inline-flex; background:var(--paper-2); border:1px solid var(--line); border-radius:999px; padding:3px; flex-wrap:wrap}
+  .seg button{border:none; background:transparent; font-family:inherit; font-weight:600; font-size:13px;
+    color:var(--ink-soft); padding:6px 14px; border-radius:999px; cursor:pointer}
+  .seg button.on{background:#fff; color:var(--ink); box-shadow:var(--shadow)}
+  .bal-row{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line)}
+  .bal-row:last-child{border-bottom:none}
+  .bar-track{flex:1; height:22px; background:var(--paper-2); border-radius:6px; position:relative; overflow:hidden}
+  .bar-fill{position:absolute; top:0; bottom:0}
+  .net{font-family:"Fraunces",serif; font-weight:600; font-size:16px; min-width:92px; text-align:right}
+  .net.pos{color:var(--forest)} .net.neg{color:var(--rust)}
+  .settle{background:var(--paper-2); border-radius:10px; padding:12px 14px; margin-top:4px}
+  .settle .s-row{padding:5px 0}
+  .stat-strip{display:flex; gap:22px; flex-wrap:wrap; margin-bottom:4px}
+  .stat .k{font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; font-weight:600}
+  .stat .v{font-family:"Fraunces",serif; font-size:24px; font-weight:600}
+  .loading{text-align:center; padding:60px; color:var(--ink-soft); font-family:"Fraunces",serif; font-style:italic}
+  .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink);
+    color:var(--paper); padding:10px 18px; border-radius:999px; font-size:13.5px; font-weight:600; opacity:0;
+    pointer-events:none; transition:.25s; z-index:50}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+  .step-num{display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:999px;
+    background:var(--forest); color:#fff; font-size:13px; font-weight:700; margin-right:8px}
+  .chips{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{font-size:12.5px; font-weight:600; padding:6px 10px; border-radius:9px; border:1px solid var(--line-strong);
+    background:#fff; cursor:pointer; transition:.12s; color:var(--ink)}
+  .chip:hover{border-color:var(--forest); background:rgba(26,163,176,.07)}
+  .chip.sel{background:rgba(26,163,176,.16); border-color:var(--forest); color:var(--forest-deep)}
+  .chip.taken{cursor:default}
+  .chip.dave{background:rgba(58,166,208,.16); border-color:var(--lake); color:#1f6f95}
+  .chip.karen{background:rgba(240,130,90,.18); border-color:var(--rust); color:#c25a32}
+  .rank-list{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+  .rank-item{display:flex; align-items:center; gap:8px; padding:6px 8px; border:1px solid var(--line); border-radius:9px; background:#fff}
+  .rank-item .rk{font-family:"Fraunces",serif; font-weight:700; color:var(--ink-soft); width:20px; text-align:center}
+  .rank-item .lbl{flex:1; font-size:13px; font-weight:600}
+  .turn-banner{padding:12px 16px; border-radius:11px; font-weight:600; margin-bottom:14px; border:1px solid}
+  .turn-banner.dave{background:rgba(58,166,208,.13); border-color:var(--lake); color:#1f6f95}
+  .turn-banner.karen{background:rgba(240,130,90,.14); border-color:var(--rust); color:#c25a32}
+  .turn-banner.done{background:rgba(26,163,176,.13); border-color:var(--forest); color:var(--forest-deep)}
+  .draft-log{font-size:13px; color:var(--ink-soft)}
+  .draft-log .lr{padding:4px 0; border-bottom:1px dashed var(--line)}
+  .rot-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-top:6px}
+  .rot-cell{border:1px solid var(--line); border-radius:10px; padding:12px; background:#fff}
+  .rot-cell .h{font-size:13px; font-weight:700; margin-bottom:2px}
+  .rot-cell .st{font-size:12.5px; color:var(--ink-soft); margin:8px 0}
+  .rot-actions{display:flex; gap:6px; flex-wrap:wrap}
+  .alloc-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media (max-width:680px){.alloc-grid{grid-template-columns:1fr} .rot-grid{grid-template-columns:1fr}}
+  .alloc-col h3{font-family:"Fraunces",serif; font-size:16px; margin:0 0 8px; display:flex; align-items:center; gap:8px}
+  .mini{font-size:12px; color:var(--ink-soft)}
+  .linkbtn{background:none;border:none;color:var(--lake);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand"><h1>The Cottage Ledger</h1></div>
+    <div class="header-meta"><div><span class="dot">&#9679;</span> shared with everyone who opens this</div>
+      <div id="syncline">loading&hellip;</div>
+      <button class="linkbtn" style="margin-top:4px" onclick="forceSync()">refresh now</button></div>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button data-tab="schedule" class="active">Schedule</button>
+    <button data-tab="season">Summer draft</button>
+    <button data-tab="expenses">Expenses</button>
+    <button data-tab="balance">Fairness</button>
+    <button data-tab="members">Family</button>
+  </nav>
+  <div id="app"><div class="loading">Looking for a shared calendar&hellip;</div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY="cottage-ledger-v2";
+const PALETTE=["#1aa3b0","#3aa6d0","#f0825a","#f4c24e","#7bb6e0","#5cc2a8","#ef7fa6","#9bd17a"];
+let state={families:[],members:[],bookings:[],expenses:[],split:"equal",season:null};
+let activeTab="schedule";
+let calRef=new Date(); calRef.setDate(1);
+let busy=false, wishAs="dave";
+let swapAs="dave", swapGive=[], swapWant=[];
+let lastRaw=null;            // last shared-storage value we know about
+const BLANK=()=>({families:[],members:[],bookings:[],expenses:[],split:"equal",season:null});
+
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function isEmptyState(s){return (!s.members||!s.members.length)&&(!s.bookings||!s.bookings.length)&&(!s.expenses||!s.expenses.length)&&!s.season;}
+
+function migrate(){
+  if(!state.families||!state.families.length){
+    state.families=[{key:"dave",name:"Dave's family",color:"#3aa6d0"},{key:"karen",name:"Karen's family",color:"#f0825a"}];
+  }
+  const s=state.season;
+  if(s&&(s.maxBlock===undefined||!s.holidaySlots||(s.holidaySlots[0]&&s.holidaySlots[0].priority===undefined))) state.season=null;
+}
+// Try hard to pull an established shared calendar before giving up (handles propagation lag / transient errors).
+async function load(){
+  for(let i=0;i<6;i++){
+    try{
+      const r=await window.storage.get(KEY,true);
+      if(r&&r.value){state=Object.assign(BLANK(),JSON.parse(r.value)); lastRaw=r.value; migrate(); return true;}
+      break;                       // responded but empty -> brand-new store
+    }catch(e){ await sleep(900); } // missing key OR transient error -> wait and retry
+  }
+  migrate();                       // no shared data found -> seed a fresh ledger
+  return false;
+}
+async function save(){
+  try{
+    busy=true; syncStatus();
+    const raw=JSON.stringify(state);
+    // read-before-write: never let a blank/just-opened client wipe an established calendar
+    try{
+      const r=await window.storage.get(KEY,true);
+      if(r&&r.value&&r.value!==lastRaw){
+        const remote=JSON.parse(r.value);
+        if(isEmptyState(state)&&!isEmptyState(remote)){
+          state=Object.assign(BLANK(),remote); lastRaw=r.value; migrate();
+          busy=false; syncStatus("saved"); render(); flashSynced(); return;
+        }
+      }
+    }catch(e){}
+    await window.storage.set(KEY,raw,true);
+    lastRaw=raw; busy=false; syncStatus("saved");
+  }catch(e){busy=false; syncStatus("error"); toast("Couldn't save \u2014 try again");}
+}
+// Pull the shared copy and apply if someone else changed it.
+async function poll(){
+  if(busy) return;
+  const ae=(document.activeElement||{}).tagName||"";
+  if(/INPUT|SELECT|TEXTAREA/.test(ae)) return;
+  await pull(false);
+}
+// Force a fetch regardless of focus (used by the refresh button + tab focus).
+async function forceSync(){ if(busy)return; await pull(true); }
+async function pull(announce){
+  try{
+    const r=await window.storage.get(KEY,true);
+    if(r&&r.value&&r.value!==lastRaw){
+      lastRaw=r.value; state=Object.assign(BLANK(),JSON.parse(r.value)); migrate();
+      render(); flashSynced();
+    } else if(announce){ toast("Already up to date"); }
+  }catch(e){ if(announce) toast("Nothing shared yet to load"); }
+}
+function flashSynced(){const el=document.getElementById("syncline"); if(el)el.textContent="updated with the latest";
+  toast("Updated with everyone's latest changes");}
+function syncStatus(s){const el=document.getElementById("syncline"); if(!el)return;
+  el.textContent=busy?"saving\u2026":(s==="error"?"save failed":"shared \u00b7 all changes saved");}
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+const fmt$=n=>"$"+(Math.round(n*100)/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const member=id=>state.members.find(m=>m.id===id);
+const family=k=>state.families.find(f=>f.key===k);
+const otherFam=k=>k==="dave"?"karen":"dave";
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function dParse(s){const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);}
+function toISO(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function dFmt(s){return dParse(s).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
+function nights(a,b){return Math.max(0,Math.round((dParse(b)-dParse(a))/86400000));}
+function slotLabel(start,end){const a=dParse(start),b=dParse(end),sm=a.getMonth()===b.getMonth();
+  return a.toLocaleDateString(undefined,{month:"short",day:"numeric"})+"\u2013"+b.toLocaleDateString(undefined,sm?{day:"numeric"}:{month:"short",day:"numeric"});}
+function toast(msg){const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+function bookingOwner(b){if(b.side){const f=family(b.side);return{name:f?f.name:"Family",color:f?f.color:"#888"};}
+  const m=member(b.memberId);return{name:m?m.name:"Former member",color:m?m.color:"#aaa"};}
+function ovl(s1,e1,s2,e2){return dParse(s1)<dParse(e2)&&dParse(s2)<dParse(e1);}
+function overlaps(b){return state.bookings.filter(o=>o.id!==b.id&&ovl(o.start,o.end,b.start,b.end));}
+function nightsByMember(){const o={};state.members.forEach(m=>o[m.id]=0);
+  state.bookings.forEach(b=>{if(b.memberId!=null&&o[b.memberId]!=null)o[b.memberId]+=nights(b.start,b.end);});return o;}
+
+function render(){
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab===activeTab));
+  document.getElementById("app").innerHTML=`<div class="panel show">${({
+    schedule:viewSchedule,season:viewSeason,expenses:viewExpenses,balance:viewBalance,members:viewMembers
+  })[activeTab]()}</div>`;
+  syncStatus(); if(activeTab==="schedule") drawCalendar();
+}
+
+/* FAMILY */
+function viewMembers(){
+  const sideOpts=state.families.map(f=>`<option value="${f.key}">${esc(f.name)}</option>`).join("");
+  const rows=state.members.length?state.members.map(m=>{const f=m.side?family(m.side):null;
+    return `<div class="member-row"><span class="swatch" style="background:${m.color}"></span>
+      <span class="name">${esc(m.name)}</span><span class="meta">${f?esc(f.name):""}${m.email?(f?" \u00b7 ":"")+esc(m.email):""}</span>
+      <button class="btn danger" onclick="delMember('${m.id}')">remove</button></div>`;}).join("")
+    :`<div class="empty">No family members yet.</div>`;
+  const branchRows=state.families.map(f=>{const n=state.members.filter(m=>m.side===f.key).length;
+    return `<div class="member-row"><span class="swatch" style="background:${f.color}"></span>
+      <span class="name">${esc(f.name)}</span><span class="meta">${n} member${n===1?"":"s"}</span></div>`;}).join("");
+  return `<div class="grid2">
+    <div class="card"><div class="card-h"><h2>Add family member</h2></div><div class="card-b">
+      <label class="fl">Name</label><input id="m-name" placeholder="e.g. Noah" />
+      <label class="fl">Family branch</label><select id="m-side">${sideOpts}</select>
+      <label class="fl">Email (optional)</label><input id="m-email" placeholder="noah@email.com" />
+      <button class="btn" onclick="addMember()">Add member</button>
+      <div class="hint">The two branches own the cottage together; the summer draft splits weeks between them.</div></div></div>
+    <div class="card"><div class="card-h"><h2>The two branches</h2></div><div class="card-b">
+      <div class="members-list">${branchRows}</div>
+      <h2 style="font-family:'Fraunces',serif;font-size:17px;margin:20px 0 8px;">Everyone</h2>
+      <div class="members-list">${rows}</div></div></div></div>`;
+}
+function addMember(){
+  const name=document.getElementById("m-name").value.trim(); if(!name){toast("Add a name first");return;}
+  const used=state.members.map(m=>m.color),color=PALETTE.find(c=>!used.includes(c))||PALETTE[state.members.length%PALETTE.length];
+  state.members.push({id:uid(),name,side:document.getElementById("m-side").value,email:document.getElementById("m-email").value.trim(),color});
+  save(); render();
+}
+function delMember(id){
+  if(state.bookings.some(b=>b.memberId===id)||state.expenses.some(e=>e.paidBy===id)){if(!confirm("This person has records on file. Remove anyway?"))return;}
+  state.members=state.members.filter(m=>m.id!==id); save(); render();
+}
+
+/* SCHEDULE */
+function viewSchedule(){
+  const opts=state.members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  const today=new Date();
+  const up=[...state.bookings].filter(b=>dParse(b.end)>=new Date(today.getFullYear(),today.getMonth(),today.getDate())).sort((a,b)=>dParse(a.start)-dParse(b.start));
+  const list=up.length?up.map(b=>{const o=bookingOwner(b),ov=overlaps(b);
+    return `<div class="item"><span class="swatch" style="background:${o.color}"></span>
+      <div class="grow"><div class="t">${esc(o.name)}${b.side?` <span class="tag">season pick</span>`:""}${ov.length?` <span class="warn">\u00b7 overlaps ${ov.length}</span>`:""}</div>
+      <div class="s">${dFmt(b.start)} \u2192 ${dFmt(b.end)} \u00b7 ${nights(b.start,b.end)} night${nights(b.start,b.end)===1?"":"s"}${b.note?` \u00b7 ${esc(b.note)}`:""}</div></div>
+      <button class="btn danger" onclick="delBooking('${b.id}')">cancel</button></div>`;}).join("")
+    :`<div class="empty">No upcoming stays booked.</div>`;
+  return `<div class="grid2">
+    <div class="card"><div class="card-h"><h2>Book a stay</h2></div><div class="card-b">
+      ${state.members.length?`
+        <label class="fl">Who's staying</label><select id="b-member">${opts}</select>
+        <label class="fl">Arrive</label><input id="b-start" type="date" /><label class="fl">Leave</label><input id="b-end" type="date" />
+        <label class="fl">Note (optional)</label><input id="b-note" placeholder="e.g. bringing the dog" />
+        <button class="btn" onclick="addBooking()">Add to calendar</button>
+        <div class="hint">Off-peak stays are first-come. Summer weeks are set in the draft tab.</div>`
+        :`<div class="empty">Add family members first (Family tab).</div>`}
+    </div></div>
+    <div class="card"><div class="card-h"><h2>Calendar</h2></div><div class="card-b">
+      <div class="cal-head"><button class="btn ghost sm" onclick="calMove(-1)">\u2039 prev</button><div class="mo" id="cal-mo"></div><button class="btn ghost sm" onclick="calMove(1)">next \u203a</button></div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <h2 style="font-family:'Fraunces',serif;font-size:18px;margin:22px 0 4px;">Upcoming stays</h2>${list}</div></div></div>`;
+}
+function calMove(d){calRef.setMonth(calRef.getMonth()+d); drawCalendar();}
+function drawCalendar(){
+  const grid=document.getElementById("cal-grid"); if(!grid)return;
+  document.getElementById("cal-mo").textContent=calRef.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+  const y=calRef.getFullYear(),mo=calRef.getMonth(),first=new Date(y,mo,1),start=new Date(y,mo,1-first.getDay());
+  const today=new Date(),tk=`${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  let html=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=>`<div class="cal-dow">${d}</div>`).join("");
+  for(let i=0;i<42;i++){const d=new Date(start); d.setDate(start.getDate()+i); const inMo=d.getMonth()===mo;
+    const bars=state.bookings.filter(b=>d>=dParse(b.start)&&d<dParse(b.end)).map(b=>{const o=bookingOwner(b);
+      return `<div class="cal-bar" style="background:${o.color}">${esc(o.name.split(" ")[0])}</div>`;}).join("");
+    const isToday=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`===tk;
+    html+=`<div class="cal-cell ${inMo?"":"out"} ${isToday?"today":""}"><div class="dn">${d.getDate()}</div><div class="bars">${bars}</div></div>`;}
+  grid.innerHTML=html;
+}
+function addBooking(){
+  const memberId=document.getElementById("b-member").value,start=document.getElementById("b-start").value,end=document.getElementById("b-end").value;
+  if(!start||!end){toast("Pick arrive & leave dates");return;}
+  if(dParse(end)<=dParse(start)){toast("Leave must be after arrive");return;}
+  state.bookings.push({id:uid(),memberId,start,end,note:document.getElementById("b-note").value.trim()});
+  const b=state.bookings[state.bookings.length-1],ov=overlaps(b); save(); render();
+  if(ov.length) toast(`Booked \u2014 overlaps ${ov.length} other stay${ov.length>1?"s":""}`);
+}
+function delBooking(id){state.bookings=state.bookings.filter(b=>b.id!==id); save(); render();}
+
+/* EXPENSES */
+const CATS=["Property tax","Insurance","Utilities","Internet","Maintenance","Repairs","Supplies","Other"];
+function viewExpenses(){
+  const opts=state.members.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  const catOpts=CATS.map(c=>`<option>${c}</option>`).join("");
+  const sorted=[...state.expenses].sort((a,b)=>dParse(b.date)-dParse(a.date));
+  const list=sorted.length?sorted.map(e=>{const m=member(e.paidBy);
+    return `<div class="item"><span class="swatch" style="background:${m?m.color:"#aaa"}"></span>
+      <div class="grow"><div class="t">${esc(e.desc)} <span class="tag">${esc(e.cat)}</span>${e.recurring&&e.recurring!=="one-time"?` <span class="tag">${esc(e.recurring)}</span>`:""}</div>
+      <div class="s">paid by ${m?esc(m.name):"former member"} \u00b7 ${dFmt(e.date)}</div></div>
+      <span class="amt">${fmt$(e.amount)}</span><button class="btn danger" onclick="delExpense('${e.id}')">\u00d7</button></div>`;}).join("")
+    :`<div class="empty">No expenses logged yet.</div>`;
+  const total=state.expenses.reduce((s,e)=>s+e.amount,0);
+  return `<div class="grid2">
+    <div class="card"><div class="card-h"><h2>Log an expense</h2></div><div class="card-b">
+      ${state.members.length?`
+        <label class="fl">What was it</label><input id="e-desc" placeholder="e.g. Spring dock repair" />
+        <div class="row"><div><label class="fl">Amount</label><input id="e-amt" type="number" min="0" step="0.01" placeholder="0.00" /></div>
+          <div><label class="fl">Date</label><input id="e-date" type="date" /></div></div>
+        <label class="fl">Paid by</label><select id="e-paid">${opts}</select>
+        <div class="row"><div><label class="fl">Category</label><select id="e-cat">${catOpts}</select></div>
+          <div><label class="fl">Recurrence</label><select id="e-rec"><option value="one-time">One-time</option><option value="monthly">Monthly</option><option value="annual">Annual</option></select></div></div>
+        <button class="btn" onclick="addExpense()">Log expense</button>`
+        :`<div class="empty">Add family members first (Family tab).</div>`}
+    </div></div>
+    <div class="card"><div class="card-h"><h2>Expense log</h2><span class="tag">${fmt$(total)} total</span></div><div class="card-b">${list}</div></div></div>`;
+}
+function addExpense(){
+  const desc=document.getElementById("e-desc").value.trim(),amount=parseFloat(document.getElementById("e-amt").value),date=document.getElementById("e-date").value;
+  if(!desc){toast("Add a description");return;} if(!(amount>0)){toast("Enter an amount");return;} if(!date){toast("Pick a date");return;}
+  state.expenses.push({id:uid(),desc,amount,date,paidBy:document.getElementById("e-paid").value,cat:document.getElementById("e-cat").value,recurring:document.getElementById("e-rec").value});
+  save(); render();
+}
+function delExpense(id){state.expenses=state.expenses.filter(e=>e.id!==id); save(); render();}
+
+/* FAIRNESS */
+function viewBalance(){
+  if(!state.members.length) return `<div class="card"><div class="card-b"><div class="empty">Add members and expenses to see the breakdown.</div></div></div>`;
+  const total=state.expenses.reduce((s,e)=>s+e.amount,0);
+  const nbm=nightsByMember(),tn=Object.values(nbm).reduce((a,b)=>a+b,0),useN=state.split==="nights"&&tn>0;
+  const data=state.members.map(m=>{const paid=state.expenses.filter(e=>e.paidBy===m.id).reduce((s,e)=>s+e.amount,0);
+    const share=useN?total*(nbm[m.id]/tn):total/state.members.length; return {m,paid,share,net:paid-share,nights:nbm[m.id]};});
+  const maxAbs=Math.max(1,...data.map(d=>Math.abs(d.net)));
+  const rows=data.map(d=>{const pct=Math.abs(d.net)/maxAbs*50,pos=d.net>=0;
+    return `<div class="bal-row"><span class="swatch" style="background:${d.m.color}"></span>
+      <div style="min-width:120px"><div class="t">${esc(d.m.name)}</div><div class="s" style="font-size:12px">paid ${fmt$(d.paid)} \u00b7 owes ${fmt$(d.share)}${useN?` \u00b7 ${d.nights}n`:""}</div></div>
+      <div class="bar-track"><div class="bar-fill" style="${pos?`left:50%;width:${pct}%;background:var(--forest)`:`right:50%;width:${pct}%;background:var(--rust)`}"></div>
+        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line-strong)"></div></div>
+      <span class="net ${pos?"pos":"neg"}">${pos?"+":""}${fmt$(d.net)}</span></div>`;}).join("");
+  return `<div class="card" style="margin-bottom:20px"><div class="card-b"><div class="stat-strip">
+      <div class="stat"><div class="k">Total spent</div><div class="v">${fmt$(total)}</div></div>
+      <div class="stat"><div class="k">Per person (equal)</div><div class="v">${fmt$(total/state.members.length)}</div></div>
+      <div class="stat"><div class="k">Nights booked</div><div class="v">${tn}</div></div></div></div></div>
+    <div class="card"><div class="card-h"><h2>Who's even, who's owed</h2>
+      <div class="seg"><button class="${state.split==="equal"?"on":""}" onclick="setSplit('equal')">Split equally</button>
+        <button class="${state.split==="nights"?"on":""}" onclick="setSplit('nights')">By nights used</button></div></div>
+      <div class="card-b">${useN?"":state.split==="nights"?`<div class="hint" style="margin-bottom:10px">No nights booked yet \u2014 showing equal split.</div>`:""}
+        ${rows}${settleHtml(data)}<div class="hint" style="margin-top:14px">Green = paid more than their share (owed). Red = owes.</div></div></div>`;
+}
+function setSplit(s){state.split=s; save(); render();}
+function settleHtml(data){
+  const cred=data.filter(d=>d.net>.005).map(d=>({name:d.m.name,v:d.net})).sort((a,b)=>b.v-a.v);
+  const debt=data.filter(d=>d.net<-.005).map(d=>({name:d.m.name,v:-d.net})).sort((a,b)=>b.v-a.v);
+  if(!cred.length||!debt.length) return `<div class="settle" style="margin-top:14px"><div class="s-row">Everyone's square.</div></div>`;
+  const moves=[]; let i=0,j=0;
+  while(i<debt.length&&j<cred.length){const pay=Math.min(debt[i].v,cred[j].v);
+    moves.push(`<div class="s-row"><strong>${esc(debt[i].name)}</strong> &rarr; <strong>${esc(cred[j].name)}</strong> &nbsp;<span class="net pos">${fmt$(pay)}</span></div>`);
+    debt[i].v-=pay; cred[j].v-=pay; if(debt[i].v<.005)i++; if(cred[j].v<.005)j++;}
+  return `<div class="settle" style="margin-top:16px"><div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);margin-bottom:6px">Simplest way to settle up</div>${moves.join("")}</div>`;
+}
+
+/* ================= SUMMER DRAFT ================= */
+function lastMonday(y,m){const d=new Date(y,m+1,0); while(d.getDay()!==1)d.setDate(d.getDate()-1); return d;}
+function firstMonday(y,m){const d=new Date(y,m,1); while(d.getDay()!==1)d.setDate(d.getDate()+1); return d;}
+function fridayOfWeek(d){const x=new Date(d); x.setDate(x.getDate()+(5-x.getDay())); return x;}
+function regularWeeks(){return state.season.weekSlots.filter(w=>!w.holidayWeek).sort((a,b)=>dParse(a.start)-dParse(b.start));}
+function computeQuota(){const reg=regularWeeks().length,base=Math.floor(reg/2),extra=reg-base*2,q={dave:base,karen:base}; q[state.season.firstPick]+=extra; return q;}
+
+function generateSeason(){
+  const y=parseInt(document.getElementById("se-year").value,10);
+  const startISO=document.getElementById("se-start").value,endISO=document.getElementById("se-end").value;
+  if(!startISO||!endISO||dParse(endISO)<=dParse(startISO)){toast("Check the season dates");return;}
+  const memMon=lastMonday(y,4),labMon=firstMonday(y,8),jul4=new Date(y,6,4);
+  const memFri=new Date(memMon); memFri.setDate(memFri.getDate()-3);
+  const labFri=new Date(labMon); labFri.setDate(labFri.getDate()-3);
+  const j4Fri=fridayOfWeek(jul4),j4Mon=new Date(j4Fri); j4Mon.setDate(j4Mon.getDate()+3);
+  const par=y%2;
+  const holidaySlots=[
+    {id:"h-mem",key:"memorial",name:"Memorial Day",start:toISO(memFri),end:toISO(memMon),priority:par===0?"dave":"karen",pClaim:null,sClaim:null},
+    {id:"h-jul4",key:"july4",name:"July 4th",start:toISO(j4Fri),end:toISO(j4Mon),priority:par===0?"dave":"karen",pClaim:null,sClaim:null},
+    {id:"h-lab",key:"labor",name:"Labor Day",start:toISO(labFri),end:toISO(labMon),priority:par===0?"karen":"dave",pClaim:null,sClaim:null}
+  ];
+  const sStart=dParse(startISO),sEnd=dParse(endISO);
+  let sat=new Date(sStart); while(sat.getDay()!==6) sat.setDate(sat.getDate()+1);
+  const weekSlots=[];
+  while(true){const wEnd=new Date(sat); wEnd.setDate(wEnd.getDate()+7); if(wEnd>sEnd)break;
+    const sISO=toISO(sat),eISO=toISO(wEnd),hol=holidaySlots.some(h=>ovl(sISO,eISO,h.start,h.end));
+    weekSlots.push({id:"w-"+sISO,start:sISO,end:eISO,holidayWeek:hol}); sat=new Date(wEnd);}
+  state.season={year:y,startDate:startISO,endDate:endISO,weekSlots,holidaySlots,
+    firstPick:par===0?"dave":"karen",maxBlock:2,quota:null,swaps:[],
+    mode:null,wishlists:{dave:[],karen:[]},submitted:{dave:false,karen:false},draft:null,allocation:{},applied:false};
+  state.season.quota=computeQuota();
+  save(); render(); toast("Season built");
+}
+function setFirstPick(k){state.season.firstPick=k; state.season.quota=computeQuota(); if(state.season.mode==="live")startDraft(); save(); render();}
+function setMaxBlock(n){state.season.maxBlock=n; if(state.season.mode==="live")startDraft(); save(); render();}
+function setMode(m){state.season.mode=m; state.season.allocation={}; state.season.swaps=[]; if(m==="live")startDraft(); save(); render();}
+
+/* holiday first right of refusal */
+function holidayAssigned(h){if(h.pClaim===true)return h.priority; if(h.pClaim===false&&h.sClaim===true)return otherFam(h.priority); return null;}
+function holidayOwner(h){return h.swapOwner||holidayAssigned(h);}
+function holidayDecide(hid,who,val){const h=state.season.holidaySlots.find(x=>x.id===hid); if(!h)return;
+  if(who==="p"){h.pClaim=val; if(val)h.sClaim=null;} else {h.sClaim=val;} save(); render();}
+function holidayReset(hid){const h=state.season.holidaySlots.find(x=>x.id===hid); if(!h)return; h.pClaim=null; h.sClaim=null; save(); render();}
+function holidaySwap(hid){const h=state.season.holidaySlots.find(x=>x.id===hid); if(!h)return; h.priority=otherFam(h.priority); h.pClaim=null; h.sClaim=null; save(); render();}
+
+/* wishlist mode */
+function setWishAs(k){wishAs=k; render();}
+function toggleWish(id){const w=state.season.wishlists[wishAs],i=w.indexOf(id); if(i>=0)w.splice(i,1); else w.push(id); save(); render();}
+function moveWish(id,dir){const w=state.season.wishlists[wishAs],i=w.indexOf(id),j=i+dir; if(j<0||j>=w.length)return; [w[i],w[j]]=[w[j],w[i]]; save(); render();}
+function submitWish(){if(!state.season.wishlists[wishAs].length){toast("Rank at least one week");return;} state.season.submitted[wishAs]=true; save(); render();
+  if(state.season.submitted.dave&&state.season.submitted.karen)toast("Both lists in \u2014 ready to resolve");}
+function reopenWish(k){state.season.submitted[k]=false; state.season.allocation={}; save(); render();}
+
+function pickBlock(fam,cap,rem,wishlist,idxOf,byIdx,counts,quota){
+  let seed=null; for(const id of wishlist){if(rem.has(id)){seed=id;break;}}
+  if(seed==null)return [];
+  const allowed=Math.min(cap,quota[fam]-counts[fam]); if(allowed<=0)return [];
+  const wish=new Set(wishlist); let lo=idxOf[seed],hi=idxOf[seed],block=[seed];
+  while(block.length<allowed){
+    const L=byIdx[lo-1],R=byIdx[hi+1];
+    const cR=R&&rem.has(R)&&wish.has(R), cL=L&&rem.has(L)&&wish.has(L);
+    if(cR){block.push(R); hi++;} else if(cL){block.unshift(L); lo--;} else break;
+  }
+  return block;
+}
+function resolveWishlists(){
+  const s=state.season,reg=regularWeeks(),order=reg.map(w=>w.id);
+  s.swaps=[];
+  const idxOf={}; order.forEach((id,i)=>idxOf[id]=i); const byIdx={}; order.forEach((id,i)=>byIdx[i]=id);
+  const dw=s.wishlists.dave.filter(id=>order.includes(id)),kw=s.wishlists.karen.filter(id=>order.includes(id));
+  const wantD=new Set(dw),wantK=new Set(kw),alloc={},counts={dave:0,karen:0};
+  order.forEach(id=>{const d=wantD.has(id),k=wantK.has(id);
+    if(d&&!k){alloc[id]="dave";counts.dave++;} else if(k&&!d){alloc[id]="karen";counts.karen++;}});
+  const rem=new Set(order.filter(id=>wantD.has(id)&&wantK.has(id)));
+  let initiator=s.firstPick,turnFam=s.firstPick,cap=s.maxBlock,phase="init",guard=0;
+  while(rem.size&&guard++<200){
+    if(counts.dave>=s.quota.dave&&counts.karen>=s.quota.karen)break;
+    if(counts[turnFam]>=s.quota[turnFam]){phase="init"; initiator=otherFam(turnFam); turnFam=otherFam(turnFam); cap=s.maxBlock; continue;}
+    const wl=turnFam==="dave"?dw:kw;
+    const block=pickBlock(turnFam,cap,rem,wl,idxOf,byIdx,counts,s.quota);
+    if(!block.length){ // nothing wanted left for this fam; pass
+      if(phase==="init"){initiator=otherFam(initiator); turnFam=initiator; cap=s.maxBlock;}
+      else {phase="init"; initiator=otherFam(initiator); turnFam=initiator; cap=s.maxBlock;}
+      continue;
+    }
+    block.forEach(id=>{alloc[id]=turnFam; rem.delete(id);}); counts[turnFam]+=block.length;
+    if(phase==="init"){phase="resp"; turnFam=otherFam(turnFam); cap=block.length;}
+    else {phase="init"; initiator=otherFam(initiator); turnFam=initiator; cap=s.maxBlock;}
+  }
+  s.allocation=alloc; save(); render();
+}
+
+/* live draft (blocks + matching) */
+function startDraft(){state.season.draft={picks:[],counts:{dave:0,karen:0},turnFam:state.season.firstPick,initiator:state.season.firstPick,cap:state.season.maxBlock,phase:"init",sel:[],history:[],done:false}; state.season.allocation={}; state.season.swaps=[];}
+function rebuildAlloc(d){state.season.allocation={}; d.picks.forEach(p=>p.ids.forEach(id=>state.season.allocation[id]=p.fam));}
+function finalizeDraft(d){
+  const q=state.season.quota,reg=regularWeeks(),taken=new Set(d.picks.flatMap(p=>p.ids));
+  const avail=reg.filter(w=>!taken.has(w.id)).length; let g=0;
+  while(g++<6){
+    if((d.counts.dave>=q.dave&&d.counts.karen>=q.karen)||avail===0){d.done=true; rebuildAlloc(d); return;}
+    if(d.counts[d.turnFam]>=q[d.turnFam]){d.phase="init"; d.initiator=otherFam(d.turnFam); d.turnFam=otherFam(d.turnFam); d.cap=state.season.maxBlock;}
+    else break;
+  }
+  d.done=false; rebuildAlloc(d);
+}
+function draftToggle(id){
+  const d=state.season.draft; if(!d||d.done)return;
+  const order=regularWeeks().map(w=>w.id),taken=new Set(d.picks.flatMap(p=>p.ids)); if(taken.has(id))return;
+  const q=state.season.quota,maxThis=Math.min(d.cap,q[d.turnFam]-d.counts[d.turnFam]),sel=d.sel,i=order.indexOf(id);
+  if(sel.includes(id)){
+    const idxs=sel.map(x=>order.indexOf(x)).sort((a,b)=>a-b);
+    if(i===idxs[0]||i===idxs[idxs.length-1])d.sel=sel.filter(x=>x!==id); else {toast("Remove from an end of the block");return;}
+  } else {
+    if(sel.length>=maxThis){toast(`Up to ${maxThis} week${maxThis>1?"s":""} this turn`);return;}
+    if(sel.length===0)d.sel=[id];
+    else{const idxs=sel.map(x=>order.indexOf(x)).sort((a,b)=>a-b);
+      if(i===idxs[0]-1||i===idxs[idxs.length-1]+1)d.sel=[...sel,id]; else {toast("Weeks must be consecutive");return;}}
+  }
+  save(); render();
+}
+function snap(d){d.history.push(JSON.stringify({picks:d.picks,counts:d.counts,turnFam:d.turnFam,cap:d.cap,phase:d.phase,initiator:d.initiator})); if(d.history.length>50)d.history.shift();}
+function draftCommit(){
+  const d=state.season.draft; if(!d||d.done)return; if(!d.sel.length){toast("Select at least one week");return;}
+  snap(d); const fam=d.turnFam,ids=[...d.sel],L=ids.length; d.picks.push({fam,ids}); d.counts[fam]+=L; d.sel=[];
+  if(d.phase==="init"){d.phase="resp"; d.turnFam=otherFam(fam); d.cap=L;}
+  else {d.phase="init"; d.initiator=otherFam(d.initiator); d.turnFam=d.initiator; d.cap=state.season.maxBlock;}
+  finalizeDraft(d); save(); render();
+}
+function draftPass(){
+  const d=state.season.draft; if(!d||d.done)return; snap(d); d.sel=[];
+  if(d.phase==="resp"){d.phase="init"; d.initiator=otherFam(d.initiator); d.turnFam=d.initiator; d.cap=state.season.maxBlock;}
+  else {d.initiator=otherFam(d.initiator); d.turnFam=d.initiator; d.cap=state.season.maxBlock;}
+  finalizeDraft(d); save(); render();
+}
+function draftUndo(){
+  const d=state.season.draft; if(!d||!d.history.length)return; const s=JSON.parse(d.history.pop());
+  d.picks=s.picks; d.counts=s.counts; d.turnFam=s.turnFam; d.cap=s.cap; d.phase=s.phase; d.initiator=s.initiator; d.sel=[]; d.done=false;
+  rebuildAlloc(d); save(); render();
+}
+
+function syncSeasonBookings(){
+  const s=state.season; state.bookings=state.bookings.filter(b=>!(b.season===s.year)); const tag=`Season ${s.year}`;
+  Object.entries(s.allocation).forEach(([id,fam])=>{const w=s.weekSlots.find(x=>x.id===id); if(w)state.bookings.push({id:uid(),side:fam,start:w.start,end:w.end,note:tag,season:s.year});});
+  s.holidaySlots.forEach(h=>{const a=holidayOwner(h); if(a)state.bookings.push({id:uid(),side:a,start:h.start,end:h.end,note:`${tag} \u00b7 ${h.name}`,season:s.year});});
+}
+function applySeason(){
+  syncSeasonBookings(); state.season.applied=true; save(); toast("Added to the calendar"); activeTab="schedule"; render();
+}
+
+/* swaps / trades */
+const keyOf=ref=>ref.type+":"+ref.id;
+const parseKey=k=>{const [type,id]=k.split(":"); return {type,id};};
+function ownedItems(branch){
+  const out=[];
+  regularWeeks().forEach(w=>{if(state.season.allocation[w.id]===branch)out.push({type:"week",id:w.id,start:w.start,end:w.end});});
+  state.season.holidaySlots.forEach(h=>{if(holidayOwner(h)===branch)out.push({type:"holiday",id:h.id,start:h.start,end:h.end,name:h.name});});
+  return out.sort((a,b)=>dParse(a.start)-dParse(b.start));
+}
+function refInfo(ref){
+  if(ref.type==="week"){const w=state.season.weekSlots.find(x=>x.id===ref.id); return w?{label:slotLabel(w.start,w.end),hol:false}:{label:"?",hol:false};}
+  const h=state.season.holidaySlots.find(x=>x.id===ref.id); return h?{label:h.name+" ("+slotLabel(h.start,h.end)+")",hol:true}:{label:"?",hol:true};
+}
+function ownsItem(branch,ref){
+  if(ref.type==="week")return state.season.allocation[ref.id]===branch;
+  const h=state.season.holidaySlots.find(x=>x.id===ref.id); return !!h&&holidayOwner(h)===branch;
+}
+function reassign(ref,newOwner){
+  if(ref.type==="week")state.season.allocation[ref.id]=newOwner;
+  else {const h=state.season.holidaySlots.find(x=>x.id===ref.id); if(h)h.swapOwner=newOwner;}
+}
+function setSwapAs(k){swapAs=k; swapGive=[]; swapWant=[]; render();}
+function toggleSwap(side,key){const arr=side==="give"?swapGive:swapWant; const i=arr.indexOf(key); if(i>=0)arr.splice(i,1); else arr.push(key); render();}
+function sendSwap(){
+  if(!swapGive.length||!swapWant.length){toast("Pick at least one week on each side");return;}
+  state.season.swaps=state.season.swaps||[];
+  state.season.swaps.push({id:uid(),from:swapAs,to:otherFam(swapAs),give:swapGive.map(parseKey),want:swapWant.map(parseKey),status:"pending",ts:Date.now()});
+  swapGive=[]; swapWant=[]; save(); render(); toast("Swap request sent");
+}
+function acceptSwap(rid){
+  const s=state.season,r=(s.swaps||[]).find(x=>x.id===rid); if(!r||r.status!=="pending")return;
+  const ok=r.give.every(ref=>ownsItem(r.from,ref))&&r.want.every(ref=>ownsItem(r.to,ref));
+  if(!ok){r.status="stale"; save(); render(); toast("Those weeks changed hands \u2014 request is stale"); return;}
+  r.give.forEach(ref=>reassign(ref,r.to)); r.want.forEach(ref=>reassign(ref,r.from));
+  r.status="accepted"; r.resolvedTs=Date.now();
+  if(s.applied) syncSeasonBookings();
+  save(); render(); toast(s.applied?"Trade done \u2014 calendar updated":"Trade done");
+}
+function declineSwap(rid){const r=(state.season.swaps||[]).find(x=>x.id===rid); if(r&&r.status==="pending"){r.status="declined"; save(); render();}}
+function cancelSwap(rid){state.season.swaps=(state.season.swaps||[]).filter(x=>x.id!==rid); save(); render();}
+function resetSeason(){if(confirm("Clear this season setup and start over?")){state.season=null; save(); render();}}
+
+function viewSeason(){
+  const s=state.season,dY=new Date().getFullYear();
+  if(!s){return `<div class="card"><div class="card-h"><h2><span class="step-num">1</span>Set up the season</h2></div><div class="card-b">
+    <div class="row"><div><label class="fl">Year</label><input id="se-year" type="number" value="${dY}" /></div>
+      <div><label class="fl">Peak starts</label><input id="se-start" type="date" value="${dY}-05-15" /></div>
+      <div><label class="fl">Peak ends</label><input id="se-end" type="date" value="${dY}-09-15" /></div></div>
+    <button class="btn" onclick="generateSeason()">Build the season</button>
+    <div class="hint">Full weeks run Saturday&ndash;Saturday. The three holidays become Fri&ndash;Mon long weekends, offered by first right of refusal.</div></div></div>`;}
+  const reg=regularWeeks();
+  const famBtns=()=>state.families.map(f=>`<button class="${s.firstPick===f.key?"on":""}" onclick="setFirstPick('${f.key}')">${esc(f.name.split(" ")[0])}</button>`).join("");
+  let body=`
+  <div class="card"><div class="card-h"><h2><span class="step-num">1</span>${s.year} season</h2><button class="btn ghost sm" onclick="resetSeason()">start over</button></div><div class="card-b">
+    <div class="stat-strip"><div class="stat"><div class="k">Peak weeks</div><div class="v">${reg.length}</div></div>
+      <div class="stat"><div class="k">Per branch</div><div class="v">${s.quota.dave} / ${s.quota.karen}</div></div>
+      <div class="stat"><div class="k">Holiday weekends</div><div class="v">${s.holidaySlots.length}</div></div></div>
+    <div class="hint">${slotLabel(s.startDate,s.endDate)} \u00b7 full weeks Sat&ndash;Sat</div></div></div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-num">2</span>Holiday first right of refusal</h2></div><div class="card-b">
+    <div class="rot-grid">${s.holidaySlots.map(holidayCard).join("")}</div>
+    <div class="hint" style="margin-top:12px">The family with first refusal can claim the long weekend or pass it to the other branch. Default priority flips with the year (July 4th on its own cycle); switch it anytime with "give to&hellip;".</div></div></div>
+
+  <div class="card"><div class="card-h"><h2><span class="step-num">3</span>Draft settings</h2></div><div class="card-b">
+    <label class="fl">Who drafts first this year</label><div class="seg">${famBtns()}</div>
+    <div class="hint" style="margin:6px 0 14px">Flip yearly so the first-pick edge evens out.</div>
+    <label class="fl">Longest stretch one branch can take in a turn</label><div class="seg">${[1,2,3,4].map(n=>`<button class="${s.maxBlock===n?"on":""}" onclick="setMaxBlock(${n})">${n} wk</button>`).join("")}</div>
+    <div class="hint" style="margin:6px 0 14px">A branch can grab up to this many consecutive weeks at once; the other branch then answers with an equal-size block before play continues.</div>
+    <label class="fl">How to allocate the ${reg.length} weeks</label>
+    <div class="seg"><button class="${s.mode==="wishlist"?"on":""}" onclick="setMode('wishlist')">Blind wishlists</button>
+      <button class="${s.mode==="live"?"on":""}" onclick="setMode('live')">Live draft</button></div></div></div>`;
+
+  if(s.mode==="wishlist") body+=viewWishlist(reg);
+  if(s.mode==="live") body+=viewLiveDraft(reg);
+  if(Object.keys(s.allocation).length) body+=viewAllocation(reg);
+  const finalized = s.mode==="live" ? (s.draft&&s.draft.done) : (s.mode==="wishlist" && s.submitted.dave && s.submitted.karen && Object.keys(s.allocation).length>0);
+  if(finalized) body+=viewSwaps(reg);
+  return body;
+}
+function holidayCard(h){
+  const P=family(h.priority),S=family(otherFam(h.priority));
+  let st="",act="";
+  if(h.pClaim===null){
+    st=`First refusal: <strong>${esc(P.name.split(" ")[0])}</strong>`;
+    act=`<button class="btn sm" onclick="holidayDecide('${h.id}','p',true)">${esc(P.name.split(" ")[0])} claims</button>
+         <button class="btn ghost sm" onclick="holidayDecide('${h.id}','p',false)">pass</button>`;
+  } else if(h.pClaim===true){
+    st=`<strong>${esc(P.name.split(" ")[0])}</strong> claimed it`;
+    act=`<button class="btn ghost sm" onclick="holidayReset('${h.id}')">reset</button>`;
+  } else if(h.sClaim===null){
+    st=`${esc(P.name.split(" ")[0])} passed \u2014 <strong>${esc(S.name.split(" ")[0])}</strong>'s choice`;
+    act=`<button class="btn sm" onclick="holidayDecide('${h.id}','s',true)">${esc(S.name.split(" ")[0])} claims</button>
+         <button class="btn ghost sm" onclick="holidayDecide('${h.id}','s',false)">pass</button>
+         <button class="btn ghost sm" onclick="holidayReset('${h.id}')">reset</button>`;
+  } else if(h.sClaim===true){
+    st=`<strong>${esc(S.name.split(" ")[0])}</strong> claimed it`;
+    act=`<button class="btn ghost sm" onclick="holidayReset('${h.id}')">reset</button>`;
+  } else {
+    st=`Both passed \u2014 open weekend`;
+    act=`<button class="btn ghost sm" onclick="holidayReset('${h.id}')">reset</button>`;
+  }
+  return `<div class="rot-cell"><div class="h">${esc(h.name)}</div><div class="mini">${slotLabel(h.start,h.end)}</div>
+    <div class="st">${st}</div><div class="rot-actions">${act}</div>
+    ${h.pClaim===null?`<div style="margin-top:8px"><button class="linkbtn" onclick="holidaySwap('${h.id}')">give first refusal to ${esc(S.name.split(" ")[0])}</button></div>`:""}</div>`;
+}
+function weekChip(w,cls,onclick){return `<button class="chip ${cls||""}" ${onclick?`onclick="${onclick}"`:""}>${slotLabel(w.start,w.end)}</button>`;}
+
+function viewWishlist(reg){
+  const s=state.season,sub=s.submitted;
+  if(sub.dave&&sub.karen){
+    return `<div class="card"><div class="card-h"><h2><span class="step-num">4</span>Both lists are in</h2></div><div class="card-b">
+      <p style="margin:0 0 12px">Dave's family ranked ${s.wishlists.dave.length}, Karen's ranked ${s.wishlists.karen.length}. Resolve to auto-grant uncontested weeks and snake-draft the overlaps (in blocks up to ${s.maxBlock}).</p>
+      <button class="btn" onclick="resolveWishlists()">Resolve allocation</button>
+      <button class="btn ghost" style="margin-left:8px" onclick="reopenWish('dave')">edit Dave's</button>
+      <button class="btn ghost" style="margin-left:8px" onclick="reopenWish('karen')">edit Karen's</button></div></div>`;
+  }
+  const w=s.wishlists[wishAs];
+  const ranked=w.map((id,i)=>{const wk=reg.find(x=>x.id===id); if(!wk)return"";
+    return `<div class="rank-item"><span class="rk">${i+1}</span><span class="lbl">${slotLabel(wk.start,wk.end)}</span>
+      <button class="btn ghost sm" onclick="moveWish('${id}',-1)">&uarr;</button><button class="btn ghost sm" onclick="moveWish('${id}',1)">&darr;</button>
+      <button class="btn danger" onclick="toggleWish('${id}')">remove</button></div>`;}).join("");
+  const pool=reg.filter(wk=>!w.includes(wk.id)).map(wk=>weekChip(wk,"",`toggleWish('${wk.id}')`)).join("");
+  return `<div class="card"><div class="card-h"><h2><span class="step-num">4</span>Rank your weeks</h2>
+    <div class="seg"><button class="${wishAs==="dave"?"on":""}" onclick="setWishAs('dave')">Dave's family ${sub.dave?"\u2713":""}</button>
+      <button class="${wishAs==="karen"?"on":""}" onclick="setWishAs('karen')">Karen's family ${sub.karen?"\u2713":""}</button></div></div>
+    <div class="card-b">
+      <div class="turn-banner ${wishAs}">Entering for <strong>${esc(family(wishAs).name)}</strong>. Tap weeks to add them in priority order \u2014 list adjacent weeks together if you want a stretch. Lists stay private until both submit.</div>
+      ${sub[wishAs]?`<div class="hint" style="margin-bottom:10px">This list is submitted. <button class="btn ghost sm" onclick="reopenWish('${wishAs}')">reopen to edit</button></div>`:""}
+      <label class="fl">Your ranked weeks</label><div class="rank-list">${ranked||`<div class="empty">Nothing ranked yet.</div>`}</div>
+      <label class="fl" style="margin-top:16px">Available weeks (tap to add)</label><div class="chips">${pool||`<span class="mini">All weeks added.</span>`}</div>
+      ${!sub[wishAs]?`<button class="btn" onclick="submitWish()">Submit ${esc(family(wishAs).name.split(" ")[0])}'s list</button>`:""}</div></div>`;
+}
+function viewLiveDraft(reg){
+  const s=state.season,d=s.draft; if(!d)return"";
+  const taken=new Set(d.picks.flatMap(p=>p.ids));
+  const chips=reg.map(wk=>{const fam=s.allocation[wk.id],t=taken.has(wk.id),seld=d.sel.includes(wk.id);
+    return weekChip(wk,t?(fam+" taken"):(seld?"sel":""),t?"":`draftToggle('${wk.id}')`);}).join("");
+  const log=d.picks.length?d.picks.map((p,i)=>`<div class="lr"><strong>${i+1}.</strong> ${esc(family(p.fam).name)} \u2192 ${p.ids.map(id=>{const wk=reg.find(x=>x.id===id); return wk?slotLabel(wk.start,wk.end):"";}).join(", ")}</div>`).reverse().join(""):`<div class="mini">No picks yet.</div>`;
+  let banner;
+  if(d.done) banner=`<div class="turn-banner done">Draft complete \u2014 ${d.counts.dave} weeks to Dave's, ${d.counts.karen} to Karen's.</div>`;
+  else {const who=esc(family(d.turnFam).name),rem=s.quota[d.turnFam]-d.counts[d.turnFam],cap=Math.min(d.cap,rem);
+    banner=`<div class="turn-banner ${d.turnFam}"><strong>${who}</strong> \u2014 ${d.phase==="init"?`pick up to ${cap} consecutive week${cap>1?"s":""}`:`answer with up to ${cap} week${cap>1?"s":""}`} \u00b7 ${d.counts.dave}/${s.quota.dave} &amp; ${d.counts.karen}/${s.quota.karen} taken</div>`;}
+  const selN=d.sel.length;
+  return `<div class="card"><div class="card-h"><h2><span class="step-num">4</span>Live draft</h2>
+    <button class="btn ghost sm" onclick="draftUndo()" ${d.history.length?"":"disabled"}>undo</button></div><div class="card-b">
+    ${banner}
+    ${d.done?"":`<label class="fl">Tap consecutive weeks, then take them</label>`}
+    <div class="chips">${chips}</div>
+    ${d.done?"":`<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="draftCommit()" ${selN?"":"disabled"}>Take ${selN||""} week${selN===1?"":"s"}</button>
+      <button class="btn ghost" onclick="draftPass()">${d.phase==="resp"?"Pass (take fewer)":"Skip turn"}</button></div>`}
+    <label class="fl" style="margin-top:16px">Pick log</label><div class="draft-log">${log}</div></div></div>`;
+}
+function viewAllocation(reg){
+  const s=state.season,byFam={dave:[],karen:[]};
+  Object.entries(s.allocation).forEach(([id,fam])=>{const wk=reg.find(x=>x.id===id); if(wk)byFam[fam].push(wk);});
+  const open=reg.filter(wk=>!s.allocation[wk.id]);
+  const col=k=>{const f=family(k),hs=s.holidaySlots.filter(h=>holidayOwner(h)===k);
+    const wk=byFam[k].sort((a,b)=>dParse(a.start)-dParse(b.start)).map(w=>`<div class="item"><span class="swatch" style="background:${f.color}"></span><div class="grow"><div class="t">${slotLabel(w.start,w.end)}</div><div class="s">full week</div></div></div>`).join("");
+    const hol=hs.map(h=>`<div class="item"><span class="swatch" style="background:${f.color}"></span><div class="grow"><div class="t">${esc(h.name)}</div><div class="s">${slotLabel(h.start,h.end)} \u00b7 long weekend</div></div></div>`).join("");
+    return `<div class="alloc-col"><h3><span class="swatch" style="background:${f.color}"></span>${esc(f.name)} <span class="tag">${byFam[k].length} wk + ${hs.length} hol</span></h3>${hol}${wk||`<div class="empty">No weeks.</div>`}</div>`;};
+  const openHols=s.holidaySlots.filter(h=>holidayOwner(h)==null);
+  return `<div class="card"><div class="card-h"><h2><span class="step-num">5</span>Allocation</h2>${s.applied?`<span class="tag">on the calendar</span>`:""}</div><div class="card-b">
+    <div class="alloc-grid">${col("dave")}${col("karen")}</div>
+    ${open.length?`<div class="hint" style="margin-top:14px">${open.length} week${open.length>1?"s":""} nobody requested stay open: ${open.map(w=>slotLabel(w.start,w.end)).join(", ")}.</div>`:""}
+    ${openHols.length?`<div class="hint">Holidays both branches passed (open): ${openHols.map(h=>h.name).join(", ")}.</div>`:""}
+    <button class="btn" onclick="applySeason()">${s.applied?"Re-apply to calendar":"Add all of this to the calendar"}</button>
+    <div class="hint">Each branch then splits its weeks among its own households in the Schedule tab.</div></div></div>`;
+}
+
+function swapItemChip(it,side){
+  const k=keyOf(it),arr=side==="give"?swapGive:swapWant,sel=arr.includes(k);
+  const lbl=it.name?`${esc(it.name)} \u00b7 ${slotLabel(it.start,it.end)}`:slotLabel(it.start,it.end);
+  return `<button class="chip ${sel?"sel":""}" onclick="toggleSwap('${side}','${k}')">${lbl}</button>`;
+}
+function viewSwaps(reg){
+  const s=state.season; s.swaps=s.swaps||[];
+  const me=swapAs,you=otherFam(me),mine=ownedItems(me),theirs=ownedItems(you);
+  const even=swapGive.length===swapWant.length&&swapGive.length>0;
+  const pending=s.swaps.filter(r=>r.status==="pending");
+  const past=s.swaps.filter(r=>r.status!=="pending").sort((a,b)=>(b.resolvedTs||b.ts)-(a.resolvedTs||a.ts)).slice(0,6);
+  const reqRow=r=>{
+    const giveL=r.give.map(ref=>refInfo(ref).label).join(", "),wantL=r.want.map(ref=>refInfo(ref).label).join(", ");
+    const balanced=r.give.length===r.want.length;
+    const head=`<strong>${esc(family(r.from).name)}</strong> offers <span class="tag">${r.give.length}</span> for <span class="tag">${r.want.length}</span> ${balanced?`<span class="tag" style="background:rgba(26,163,176,.14);color:var(--forest-deep);border-color:var(--forest)">even</span>`:`<span class="tag" style="background:rgba(240,130,90,.16);color:#c25a32;border-color:var(--rust)">uneven</span>`}`;
+    const body=`<div class="s" style="margin-top:4px"><span style="color:var(--rust)">gives</span> ${esc(giveL)} &nbsp;&harr;&nbsp; <span style="color:var(--forest)">gets</span> ${esc(wantL)}</div>`;
+    if(r.status==="pending"){
+      return `<div class="item" style="align-items:flex-start"><div class="grow">${head}${body}
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn sm" onclick="acceptSwap('${r.id}')">${esc(family(r.to).name.split(" ")[0])} accepts</button>
+          <button class="btn ghost sm" onclick="declineSwap('${r.id}')">decline</button>
+          <button class="btn ghost sm" onclick="cancelSwap('${r.id}')">cancel</button></div></div></div>`;
+    }
+    const badge={accepted:"accepted",declined:"declined",stale:"stale"}[r.status]||r.status;
+    return `<div class="item"><div class="grow">${head}${body}</div><span class="tag">${badge}</span>
+      <button class="btn danger" onclick="cancelSwap('${r.id}')">\u00d7</button></div>`;
+  };
+  return `<div class="card"><div class="card-h"><h2><span class="step-num">6</span>Swaps &amp; trades</h2>
+    <div class="seg"><button class="${me==="dave"?"on":""}" onclick="setSwapAs('dave')">as Dave's</button>
+      <button class="${me==="karen"?"on":""}" onclick="setSwapAs('karen')">as Karen's</button></div></div>
+    <div class="card-b">
+    <div class="hint" style="margin-bottom:12px">Propose an even trade to get more of the weeks you actually want. The other branch has to accept, and ${s.applied?"the calendar updates the moment they do.":"it updates the allocation (push it to the calendar when ready)."}</div>
+    <div class="alloc-grid">
+      <div class="alloc-col"><h3 style="font-size:14px">${esc(family(me).name)} gives</h3>
+        <div class="chips">${mine.length?mine.map(it=>swapItemChip(it,"give")).join(""):`<span class="mini">No weeks held.</span>`}</div></div>
+      <div class="alloc-col"><h3 style="font-size:14px">in exchange for ${esc(family(you).name)}'s</h3>
+        <div class="chips">${theirs.length?theirs.map(it=>swapItemChip(it,"want")).join(""):`<span class="mini">No weeks held.</span>`}</div></div>
+    </div>
+    <div style="margin-top:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <button class="btn" onclick="sendSwap()" ${swapGive.length&&swapWant.length?"":"disabled"} style="margin-top:0">Request ${swapGive.length}-for-${swapWant.length} swap</button>
+      ${swapGive.length||swapWant.length?`<span class="tag" style="${even?"background:rgba(26,163,176,.14);color:var(--forest-deep);border-color:var(--forest)":"background:rgba(240,130,90,.16);color:#c25a32;border-color:var(--rust)"}">${even?"even trade":"uneven \u2014 "+swapGive.length+" for "+swapWant.length}</span>`:""}
+    </div>
+    <label class="fl" style="margin-top:18px">Pending requests</label>
+    ${pending.length?pending.map(reqRow).join(""):`<div class="empty">No open requests.</div>`}
+    ${past.length?`<label class="fl" style="margin-top:18px">Recent</label>${past.map(reqRow).join("")}`:""}
+    </div></div>`;
+}
+
+document.getElementById("tabs").addEventListener("click",e=>{if(e.target.dataset.tab){activeTab=e.target.dataset.tab; render();}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)forceSync();});
+(async function(){await load(); render(); setInterval(poll,4000);})();
+</script>
